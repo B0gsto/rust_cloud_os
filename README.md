@@ -18,11 +18,13 @@ Instead of heavy hardware emulation or expensive server-side compute instances, 
 
 ## Project Layout
 
+```text
 .
 ├── Cargo.toml          # Workspace manifest
 ├── Cargo.lock
 ├── server/             # Axum API server & static asset delivery
 └── web/                # Yew WASM frontend dashboard
+```
 
 *Large local runtime images, generated build outputs, logs, and state files are intentionally isolated and ignored by Git.*
 
