@@ -1,0 +1,18 @@
+# Rust build output
+/target/
+**/target/
+
+# Generated frontend/server assets
+/server/web-dist/
+
+# Large local runtime artifacts
+/artifacts/
+
+# Local logs and process files
+*.log
+*.pid
+
+# Editor and OS files
+.DS_Store
+.idea/
+.vscode/

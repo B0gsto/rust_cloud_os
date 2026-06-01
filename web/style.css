@@ -1,0 +1,1549 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap');
+
+:root {
+    --bg-dark: #05070f;
+    --bg-card: rgba(10, 16, 32, 0.45);
+    --bg-input: rgba(5, 7, 15, 0.6);
+    --border-color: rgba(255, 255, 255, 0.08);
+    --border-focus: #8b5cf6;
+    --accent-purple: #7c3aed;
+    --accent-purple-hover: #6d28d9;
+    --accent-purple-glow: rgba(124, 58, 237, 0.4);
+    --accent-emerald: #10b981;
+    --accent-emerald-glow: rgba(16, 185, 129, 0.3);
+    --accent-amber: #f59e0b;
+    --accent-red: #ef4444;
+    --accent-cyan: #06b6d4;
+    --text-primary: #ffffff;
+    --text-secondary: rgba(255, 255, 255, 0.7);
+    --text-muted: rgba(255, 255, 255, 0.4);
+    --glass-blur: blur(20px);
+    --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    background-color: var(--bg-dark);
+    color: var(--text-primary);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    height: 100vh;
+    overflow: hidden;
+    line-height: 1.5;
+}
+
+h1, h2, h3, h4, h5, .logo {
+    font-family: 'Outfit', sans-serif;
+    letter-spacing: -0.02em;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-purple-glow);
+}
+
+/* Landing Page (Unauthenticated) */
+main.landing {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 40px 24px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    background-image: 
+        radial-gradient(at 0% 0%, rgba(124, 58, 237, 0.12) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(6, 182, 212, 0.08) 0px, transparent 50%);
+    animation: fadeIn 0.8s ease-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.hero {
+    text-align: center;
+    padding: 40px 0;
+}
+
+.hero h1 {
+    font-size: 64px;
+    font-weight: 800;
+    background: linear-gradient(135deg, #ffffff 20%, #a78bfa 60%, #06b6d4 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 20px;
+    line-height: 1.1;
+}
+
+.hero p {
+    font-size: 20px;
+    color: var(--text-secondary);
+    max-width: 700px;
+    margin: 0 auto 36px;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, var(--accent-purple), #6366f1);
+    color: white;
+    font-weight: 600;
+    font-size: 16px;
+    padding: 14px 32px;
+    border-radius: 12px;
+    text-decoration: none;
+    display: inline-block;
+    transition: var(--transition);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 4px 20px var(--accent-purple-glow);
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px var(--accent-purple-glow);
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 20px;
+    margin: 40px 0;
+}
+
+.grid b {
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--border-color);
+    border-radius: 18px;
+    padding: 24px;
+    text-align: center;
+    transition: var(--transition);
+}
+
+.grid b:hover {
+    transform: translateY(-4px);
+    border-color: rgba(124, 58, 237, 0.3);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.grid b span {
+    font-size: 16px;
+    font-weight: 700;
+    display: block;
+    margin-bottom: 8px;
+}
+
+/* Auth Cards */
+.card-container {
+    max-width: 440px;
+    margin: 0 auto 40px;
+    width: 100%;
+}
+
+.card {
+    background: rgba(13, 19, 33, 0.65);
+    backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--border-color);
+    border-radius: 24px;
+    padding: 32px;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+}
+
+.card-title {
+    font-size: 26px;
+    font-weight: 700;
+    margin-bottom: 24px;
+    text-align: center;
+}
+
+.auth-tabs {
+    display: flex;
+    background: var(--bg-input);
+    padding: 4px;
+    border-radius: 12px;
+    margin-bottom: 24px;
+    border: 1px solid var(--border-color);
+}
+
+.auth-tab {
+    flex: 1;
+    text-align: center;
+    padding: 10px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: var(--transition);
+    border: none;
+    background: transparent;
+}
+
+.auth-tab.active {
+    background: var(--accent-purple);
+    color: white;
+}
+
+.auth-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.input-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+input[type="text"], input[type="password"], input[type="email"], select {
+    padding: 12px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-input);
+    color: white;
+    font-size: 14px;
+    transition: var(--transition);
+}
+
+input:focus, select:focus {
+    outline: none;
+    border-color: var(--border-focus);
+    box-shadow: 0 0 0 3px var(--accent-purple-glow);
+}
+
+.btn-submit {
+    background: linear-gradient(135deg, var(--accent-purple), #6366f1);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 12px;
+    width: 100%;
+    cursor: pointer;
+    font-size: 15px;
+    font-weight: 600;
+    transition: var(--transition);
+}
+
+.btn-submit:hover {
+    box-shadow: 0 4px 15px var(--accent-purple-glow);
+}
+
+.msg-error {
+    text-align: center;
+    margin-top: 16px;
+    font-size: 13px;
+    padding: 10px;
+    border-radius: 8px;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    color: #f87171;
+}
+
+.msg-info, .msg-success {
+    text-align: center;
+    margin-top: 16px;
+    font-size: 13px;
+    padding: 10px;
+    border-radius: 8px;
+    background: rgba(139, 92, 246, 0.1);
+    border: 1px solid rgba(139, 92, 246, 0.2);
+    color: #c084fc;
+}
+
+
+/* ---------------------------------------------------- */
+/* BROWSER OS DESKTOP CONTAINER                         */
+/* ---------------------------------------------------- */
+.desktop-area {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image: url('https://images.unsplash.com/photo-1620641788421-7a1c342ea42e?q=80&w=1974&auto=format&fit=crop'); /* Custom Ubuntu Aubergine fallback! */
+    background-size: cover;
+    background-position: center;
+    overflow: hidden;
+    padding-top: 30px; /* Space for Top status bar */
+    padding-bottom: 0px; /* Left dock layout needs 0 bottom padding */
+    user-select: none;
+    animation: desktopFadeIn 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes desktopFadeIn {
+    from { opacity: 0; filter: scale(1.05) blur(10px); }
+    to { opacity: 1; filter: scale(1) blur(0); }
+}
+
+/* GNOME Top Status Bar */
+.top-menu-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 30px;
+    background: rgba(18, 18, 18, 0.96); /* Solid dark graphite GNOME panel */
+    backdrop-filter: blur(25px);
+    -webkit-backdrop-filter: blur(25px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 16px;
+    font-size: 13px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.95);
+    z-index: 10000;
+}
+
+.top-menu-center {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    color: rgba(255, 255, 255, 0.95);
+    display: flex;
+    align-items: center;
+}
+
+.top-menu-left, .top-menu-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.top-menu-item {
+    cursor: pointer;
+    transition: opacity 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.top-menu-item:hover {
+    opacity: 0.7;
+}
+
+.top-menu-item.logo-item {
+    font-size: 15px;
+    font-weight: bold;
+    color: white;
+}
+
+.top-menu-item.badge {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.top-menu-item.badge.pro {
+    background: rgba(16, 185, 129, 0.2);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+/* Desktop Icons Grid */
+.desktop-shortcuts {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    grid-auto-rows: 90px;
+    gap: 16px;
+    padding: 24px;
+    max-height: 80vh;
+    grid-flow: column;
+    justify-content: start;
+    z-index: 5;
+    position: relative;
+    margin-left: 68px; /* Shift past left sidebar */
+}
+
+.desktop-shortcut {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    cursor: pointer;
+    border-radius: 12px;
+    transition: var(--transition);
+    padding: 8px;
+    width: 80px;
+    height: 90px;
+}
+
+.desktop-shortcut:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.desktop-shortcut-icon {
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 11px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: white;
+    font-size: 20px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    transition: var(--transition);
+}
+
+.desktop-shortcut:hover .desktop-shortcut-icon {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px var(--accent-purple-glow);
+    border-color: rgba(124, 58, 237, 0.4);
+    background: rgba(124, 58, 237, 0.15);
+    color: #c084fc;
+}
+
+.desktop-shortcut-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+    color: white;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
+}
+
+
+/* GNOME Left Sidebar Panel (replacing macOS Dock) */
+.gnome-sidebar {
+    position: fixed;
+    top: 30px; /* Under GNOME Top panel */
+    left: 0;
+    bottom: 0;
+    width: 68px;
+    background: rgba(18, 18, 18, 0.88); /* Deep transparent dark charcoal */
+    backdrop-filter: blur(25px);
+    -webkit-backdrop-filter: blur(25px);
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    padding: 20px 0;
+    z-index: 9999;
+    box-shadow: 5px 0 25px rgba(0, 0, 0, 0.4);
+}
+
+.gnome-sidebar-icon {
+    width: 46px;
+    height: 46px;
+    border-radius: 10px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s ease, background-color 0.2s, border-color 0.2s;
+    color: white;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    position: relative;
+    font-size: 20px;
+}
+
+.gnome-sidebar-icon:hover {
+    transform: scale(1.1);
+    background: rgba(233, 84, 32, 0.25); /* Ubuntu Orange transparent */
+    border-color: rgba(233, 84, 32, 0.4);
+    color: #ff7e47;
+}
+
+.gnome-sidebar-icon.active::before {
+    content: '';
+    position: absolute;
+    left: -6px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 4px;
+    height: 12px;
+    border-radius: 2px;
+    background: #e95420; /* Ubuntu Orange Indicator */
+    box-shadow: 0 0 8px #e95420;
+}
+
+.gnome-sidebar-icon.active:hover::before {
+    background: #ff7e47;
+    box-shadow: 0 0 10px #ff7e47;
+}
+
+.gnome-sidebar-separator {
+    width: 32px;
+    height: 1px;
+    background: rgba(255, 255, 255, 0.12);
+    margin: 4px 0;
+}
+
+
+/* ---------------------------------------------------- */
+/* DYNAMIC FLOATING WINDOW SYSTEM                       */
+/* ---------------------------------------------------- */
+/* DYNAMIC FLOATING WINDOW SYSTEM */
+.os-window {
+    position: absolute;
+    background: rgba(24, 24, 24, 0.82); /* Dark graphite GTK style */
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px; /* Slightly tighter rounded corners for modern GNOME */
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    z-index: 10;
+    transition: box-shadow 0.2s, border-color 0.2s;
+}
+
+.os-window.active {
+    z-index: 100;
+    border-color: rgba(233, 84, 32, 0.4); /* Ubuntu Orange border highlight */
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.65), 0 0 20px rgba(233, 84, 32, 0.18);
+}
+
+.os-window-header {
+    height: 38px;
+    background: #2d2d2d; /* Solid graphite GTK header */
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    cursor: move;
+    user-select: none;
+    position: relative;
+}
+
+.os-window-controls {
+    display: flex;
+    gap: 8px;
+    position: absolute;
+    right: 14px; /* Move window controls to the right for Linux theme */
+    left: auto;
+}
+
+.os-control-btn {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.4);
+    background: rgba(255, 255, 255, 0.08);
+    transition: var(--transition);
+    position: relative;
+}
+
+.os-control-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+}
+
+.os-control-btn.close:hover {
+    background: #e95420; /* Ubuntu Orange close button */
+    color: white;
+}
+
+.os-control-btn.minimize::before {
+    content: '−';
+    position: absolute;
+    font-weight: bold;
+}
+
+.os-control-btn.maximize::before {
+    content: '⬜';
+    position: absolute;
+    font-size: 6px;
+}
+
+.os-control-btn.close::before {
+    content: '×';
+    position: absolute;
+    font-size: 12px;
+    font-weight: bold;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.os-window-title {
+    margin: 0 auto;
+    font-size: 13px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.85);
+    font-family: 'Outfit', sans-serif;
+}
+
+.os-window-body {
+    flex: 1;
+    overflow: auto;
+    background: rgba(0, 0, 0, 0.25);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+
+.os-window-resize-handle {
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    right: 0;
+    bottom: 0;
+    cursor: se-resize;
+    z-index: 1001;
+}
+
+.os-window-resize-handle::after {
+    content: '';
+    position: absolute;
+    right: 3px;
+    bottom: 3px;
+    width: 5px;
+    height: 5px;
+    border-right: 2px solid rgba(255, 255, 255, 0.35);
+    border-bottom: 2px solid rgba(255, 255, 255, 0.35);
+}
+
+
+/* ---------------------------------------------------- */
+/* APP DEFINITIONS                                      */
+/* ---------------------------------------------------- */
+
+/* 1. Linux Desktop VM App */
+.vm-desktop-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: #0a0a0a;
+    overflow: hidden;
+}
+
+.vm-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 12px;
+    background: rgba(15, 23, 42, 0.95);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    gap: 12px;
+    flex-shrink: 0;
+}
+
+.vm-toolbar-left, .vm-toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.vm-toolbar-label {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.6);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+
+.vm-distro-select {
+    background: rgba(5, 7, 15, 0.8);
+    border: 1px solid rgba(124, 58, 237, 0.3);
+    color: #c084fc;
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-family: 'Inter', sans-serif;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.vm-distro-select:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.4);
+    border-color: var(--accent-purple);
+}
+
+.vm-distro-select:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.vm-btn {
+    padding: 5px 14px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    transition: var(--transition);
+    font-family: 'Inter', sans-serif;
+    white-space: nowrap;
+}
+
+.vm-btn-boot {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+}
+
+.vm-btn-boot:hover {
+    box-shadow: 0 4px 16px rgba(16, 185, 129, 0.5);
+    transform: translateY(-1px);
+}
+
+.vm-btn-stop {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    color: white;
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+}
+
+.vm-btn-stop:hover {
+    box-shadow: 0 4px 16px rgba(239, 68, 68, 0.5);
+    transform: translateY(-1px);
+}
+
+.vm-btn-lg {
+    padding: 10px 28px;
+    font-size: 15px;
+    border-radius: 10px;
+}
+
+.vm-status-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: #fbbf24;
+    font-weight: 500;
+    padding: 4px 12px;
+    background: rgba(251, 191, 36, 0.1);
+    border: 1px solid rgba(251, 191, 36, 0.2);
+    border-radius: 6px;
+    white-space: nowrap;
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.vm-status-spinner {
+    width: 10px;
+    height: 10px;
+    border: 2px solid rgba(251, 191, 36, 0.3);
+    border-top-color: #fbbf24;
+    border-radius: 50%;
+    animation: vm-spin 0.8s linear infinite;
+    flex-shrink: 0;
+}
+
+@keyframes vm-spin {
+    to { transform: rotate(360deg); }
+}
+
+.vm-screen-wrapper {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #000;
+}
+
+.vm-screen {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.vm-screen > div:first-child {
+    color: #aaa;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    overflow: auto;
+    padding: 4px;
+}
+
+.virtual-terminal-workspace {
+    background: #05070f;
+}
+
+.terminal-toolbar {
+    height: 42px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    background: linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(5, 7, 15, 0.94));
+    border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+    color: rgba(226, 232, 240, 0.92);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.terminal-toolbar-title,
+.terminal-toolbar-profile {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+}
+
+.terminal-toolbar-profile {
+    color: rgba(209, 250, 229, 0.75);
+    font-weight: 600;
+}
+
+.terminal-led {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #34d399;
+    box-shadow: 0 0 12px rgba(52, 211, 153, 0.8);
+}
+
+.terminal-screen-wrapper {
+    align-items: stretch;
+    justify-content: stretch;
+    background: radial-gradient(circle at top left, rgba(16, 185, 129, 0.08), transparent 32%), #05070f;
+}
+
+.terminal-container {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    padding: 10px;
+    background: #05070f;
+    overflow: hidden;
+}
+
+.terminal-container .xterm {
+    width: 100%;
+    height: 100%;
+}
+
+.terminal-container .xterm-screen,
+.terminal-container .xterm-viewport {
+    border-radius: 8px;
+}
+
+.terminal-container .xterm-viewport {
+    background: #05070f !important;
+}
+
+.terminal-splash {
+    background: radial-gradient(circle at center, rgba(16, 20, 36, 0.94) 0%, rgba(5, 7, 15, 0.98) 100%);
+}
+
+.vm-splash {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    background: rgba(5, 7, 15, 0.92);
+    backdrop-filter: blur(12px);
+    z-index: 10;
+    text-align: center;
+    padding: 32px;
+}
+
+.vm-splash-icon {
+    font-size: 56px;
+    margin-bottom: 8px;
+    filter: drop-shadow(0 4px 12px rgba(124, 58, 237, 0.3));
+}
+
+.vm-splash h3 {
+    font-size: 22px;
+    font-weight: 700;
+    color: white;
+    font-family: 'Outfit', sans-serif;
+}
+
+.vm-splash p {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.6);
+    max-width: 400px;
+    line-height: 1.5;
+}
+
+.vm-error-text {
+    color: #f87171 !important;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 12px;
+}
+
+
+/* 2. Visual S3 File Explorer App */
+.explorer-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: #090e18;
+}
+
+.explorer-toolbar {
+    height: 48px;
+    background: rgba(255, 255, 255, 0.02);
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 16px;
+}
+
+.explorer-toolbar input[type="text"] {
+    flex: 1;
+    height: 32px;
+    padding: 0 12px;
+    font-size: 13px;
+}
+
+.explorer-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+}
+
+/* Redefined File Layout inside desktop window */
+.explorer-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 16px;
+}
+
+.explorer-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    cursor: pointer;
+    border-radius: 10px;
+    padding: 12px 8px;
+    transition: var(--transition);
+    border: 1px solid transparent;
+}
+
+.explorer-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: var(--border-color);
+}
+
+.explorer-item-icon {
+    width: 44px;
+    height: 44px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    color: var(--accent-cyan);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+}
+
+.explorer-item-label {
+    font-size: 11px;
+    text-align: center;
+    color: var(--text-primary);
+    word-break: break-all;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.explorer-item-size {
+    font-size: 9px;
+    color: var(--text-muted);
+}
+
+
+/* 3. Multi-Tab IDE Editor App */
+.ide-container {
+    flex: 1;
+    display: flex;
+    background: #111422;
+}
+
+.ide-sidebar {
+    width: 200px;
+    border-right: 1px solid var(--border-color);
+    background: rgba(0,0,0,0.15);
+    display: flex;
+    flex-direction: column;
+}
+
+.ide-sidebar-title {
+    height: 38px;
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.ide-file-list {
+    flex: 1;
+    overflow-y: auto;
+    list-style: none;
+    padding: 8px 4px;
+}
+
+.ide-file-item {
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-secondary);
+}
+
+.ide-file-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: white;
+}
+
+.ide-file-item.active {
+    background: rgba(124, 58, 237, 0.15);
+    border: 1px solid rgba(124, 58, 237, 0.25);
+    color: #c084fc;
+}
+
+.ide-editor-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.ide-tab-bar {
+    height: 38px;
+    background: rgba(0,0,0,0.1);
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    gap: 4px;
+}
+
+.ide-tab {
+    padding: 0 16px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--text-secondary);
+}
+
+.ide-tab.active {
+    background: #111422;
+    border-bottom-color: transparent;
+    color: white;
+}
+
+.ide-code-textarea {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: #a5b4fc;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 14px;
+    line-height: 1.5;
+    padding: 16px;
+    resize: none;
+    outline: none;
+}
+
+.ide-editor-footer {
+    height: 30px;
+    background: rgba(0,0,0,0.25);
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+
+/* 4. Mock Web Browser App */
+.browser-window-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: #ffffff;
+    color: #000000;
+}
+
+.browser-bar {
+    height: 42px;
+    background: #eef2f6;
+    border-bottom: 1px solid #d1d9e0;
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    gap: 12px;
+}
+
+.browser-nav-dots {
+    display: flex;
+    gap: 6px;
+}
+
+.browser-nav-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #cbd5e1;
+}
+
+.browser-address-input {
+    flex: 1;
+    height: 28px;
+    border-radius: 6px;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    padding: 0 12px;
+    font-size: 12px;
+    color: #334155;
+    display: flex;
+    align-items: center;
+}
+
+.browser-iframe-mock {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 16px;
+    background: #f8fafc;
+    padding: 40px;
+    text-align: center;
+}
+
+.browser-search-logo {
+    font-size: 48px;
+    font-weight: 800;
+    background: linear-gradient(135deg, #4f46e5, #06b6d4);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+
+/* 5. Custom System Settings Dashboard App */
+.settings-container {
+    flex: 1;
+    display: flex;
+    background: #0b1120;
+    padding: 24px;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.settings-section-title {
+    font-size: 16px;
+    font-weight: 700;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 8px;
+    margin-bottom: 12px;
+    color: var(--accent-cyan);
+}
+
+.settings-wallpapers {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 24px;
+}
+
+.settings-wallpaper-thumbnail {
+    height: 70px;
+    border-radius: 8px;
+    background-size: cover;
+    background-position: center;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.settings-wallpaper-thumbnail:hover {
+    transform: scale(1.05);
+}
+
+.settings-wallpaper-thumbnail.active {
+    border-color: var(--accent-purple);
+    box-shadow: 0 0 10px var(--accent-purple-glow);
+}
+
+.settings-stat-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.settings-stat-row strong {
+    color: white;
+}
+
+/* ---------------------------------------------------- */
+/* FULLSCREEN TABBED DASHBOARD SYSTEM                   */
+/* ---------------------------------------------------- */
+.dashboard-container {
+    display: flex;
+    flex-direction: column;
+    width: 100vw;
+    height: 100vh;
+    background: var(--bg-dark);
+    overflow: hidden;
+    animation: dashboardFadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.dashboard-header {
+    height: 60px;
+    background: rgba(10, 16, 32, 0.85);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 20px;
+    z-index: 100;
+}
+
+.dashboard-logo-section {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.dashboard-logo {
+    font-size: 18px;
+    font-weight: 800;
+    background: linear-gradient(135deg, #ffffff 30%, #a78bfa 70%, #06b6d4 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'Outfit', sans-serif;
+    letter-spacing: -0.02em;
+}
+
+.dashboard-logo-indicator {
+    width: 8px;
+    height: 8px;
+    background-color: var(--accent-purple);
+    border-radius: 50%;
+    box-shadow: 0 0 10px var(--accent-purple-glow);
+    animation: statusPulse 2s infinite ease-in-out;
+}
+
+.dashboard-status-center {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.dashboard-meta-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.dashboard-main {
+    flex: 1;
+    display: flex;
+    width: 100%;
+    height: calc(100vh - 60px);
+    overflow: hidden;
+}
+
+.dashboard-sidebar {
+    width: 70px;
+    background: rgba(8, 12, 24, 0.95);
+    border-right: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px 0;
+    gap: 18px;
+    z-index: 90;
+    box-shadow: 5px 0 25px rgba(0, 0, 0, 0.4);
+}
+
+.dashboard-sidebar-item {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: var(--transition);
+    position: relative;
+}
+
+.dashboard-sidebar-item:hover {
+    background: rgba(124, 58, 237, 0.15);
+    border-color: rgba(124, 58, 237, 0.3);
+    color: #c084fc;
+    transform: scale(1.05);
+}
+
+.dashboard-sidebar-item.active {
+    background: linear-gradient(135deg, var(--accent-purple), #6366f1);
+    color: white;
+    border-color: rgba(255, 255, 255, 0.1);
+    box-shadow: 0 4px 15px var(--accent-purple-glow);
+}
+
+.dashboard-sidebar-item.active::before {
+    content: '';
+    position: absolute;
+    left: -8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 4px;
+    height: 16px;
+    border-radius: 0 4px 4px 0;
+    background: #a78bfa;
+    box-shadow: 0 0 10px #a78bfa;
+}
+
+.dashboard-sidebar-spacer {
+    flex: 1;
+}
+
+.dashboard-content {
+    flex: 1;
+    height: 100%;
+    position: relative;
+    background: #060813;
+    overflow: hidden;
+}
+
+.tab-content {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Reset inner app elements inside dashboard tabs to fit perfectly */
+.tab-content .explorer-container,
+.tab-content .ide-container,
+.tab-content .settings-container,
+.tab-content .browser-window-container {
+    width: 100%;
+    height: 100%;
+    border: none !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+}
+
+.tab-content .ide-container {
+    background: #090b14 !important;
+}
+
+.tab-content .settings-container {
+    background: #060813 !important;
+    overflow-y: auto;
+}
+
+.vm-distro-dropdown {
+    background: rgba(15, 23, 42, 0.8);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+    padding: 6px 12px;
+    font-size: 13px;
+    font-weight: 500;
+    transition: var(--transition);
+    cursor: pointer;
+}
+
+.vm-distro-dropdown:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.vm-distro-dropdown:focus {
+    border-color: var(--accent-purple);
+    box-shadow: 0 0 0 2px var(--accent-purple-glow);
+}
+
+.vm-status-badge-lg {
+    padding: 6px 16px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-color);
+    letter-spacing: 0.02em;
+    transition: var(--transition);
+}
+
+.vm-status-badge-lg.running {
+    background: rgba(16, 185, 129, 0.12);
+    border-color: rgba(16, 185, 129, 0.25);
+    color: #34d399;
+    box-shadow: 0 0 15px rgba(16, 185, 129, 0.05);
+}
+
+.vm-status-badge-lg.booting {
+    background: rgba(245, 158, 11, 0.12);
+    border-color: rgba(245, 158, 11, 0.25);
+    color: #fbbf24;
+    box-shadow: 0 0 15px rgba(245, 158, 11, 0.05);
+}
+
+.vm-status-badge-lg.downloading {
+    background: rgba(59, 130, 246, 0.12);
+    border-color: rgba(59, 130, 246, 0.25);
+    color: #60a5fa;
+    box-shadow: 0 0 15px rgba(59, 130, 246, 0.05);
+}
+
+.vm-status-badge-lg.stopped {
+    background: rgba(255, 255, 255, 0.03);
+    border-color: var(--border-color);
+    color: var(--text-secondary);
+}
+
+.vm-status-badge-lg.error {
+    background: rgba(239, 68, 68, 0.12);
+    border-color: rgba(239, 68, 68, 0.25);
+    color: #f87171;
+    box-shadow: 0 0 15px rgba(239, 68, 68, 0.05);
+}
+
+.status-dot-pulse {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: currentColor;
+    animation: statusPulse 1.5s infinite ease-in-out;
+}
+
+@keyframes statusPulse {
+    0% { transform: scale(0.85); opacity: 0.55; }
+    50% { transform: scale(1.15); opacity: 1; }
+    100% { transform: scale(0.85); opacity: 0.55; }
+}
+
+.power-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
+    cursor: pointer;
+    font-size: 14px;
+    transition: var(--transition);
+}
+
+.power-btn.boot {
+    background: rgba(16, 185, 129, 0.1);
+    border-color: rgba(16, 185, 129, 0.2);
+    color: #34d399;
+}
+
+.power-btn.boot:hover {
+    background: #10b981;
+    color: white;
+    box-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
+}
+
+.power-btn.stop {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.2);
+    color: #f87171;
+}
+
+.power-btn.stop:hover {
+    background: #ef4444;
+    color: white;
+    box-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
+}
+
+/* Customize VM splash screen to fit as tab primary dashboard */
+.tab-content .vm-splash {
+    background: radial-gradient(circle at center, rgba(16, 20, 36, 0.98) 0%, rgba(5, 7, 15, 0.99) 100%);
+    backdrop-filter: none;
+}
+
+

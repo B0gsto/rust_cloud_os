@@ -1,0 +1,737 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Rust Cloud OS</title>
+    <link data-trunk rel="rust">
+    <link data-trunk rel="css" href="style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css" crossorigin="anonymous">
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.js" crossorigin="anonymous"></script>
+    <script>
+        /**
+         * Browser OS bridge
+         * -----------------
+         * This page intentionally contains no legacy hardware-emulator or BIOS boot path.
+         * The bridge below binds an xterm.js terminal to a client-side x86 OS runtime.
+         *
+         * Production engine contract (preferred): expose window.RustCloudJitOS with:
+         *   - create({ profile, terminal, baseImageUrl, snapshotUrl, onStatus }) -> runtime
+         *   - runtime.writeStdin(string | Uint8Array) OR runtime.attachTerminal(adapter)
+         *   - runtime.exportDirtyBlocks() OR runtime.exportStateBlob() OR runtime.saveState()
+         *   - optional runtime.writeFile(path, Uint8Array), deleteFile(path), watchFiles(...), destroy()
+         *
+         * Development fallback: if no RustCloudJitOS adapter is loaded, CheerpX is used as a
+         * CheerpX/WebVM-style runtime adapter for terminal execution. CheerpX does not expose a
+         * public dirty-block export API, so production snapshot saves must be implemented by the
+         * supplied RustCloudJitOS adapter.
+         */
+        window.osRuntime = null;
+        window.terminalRuntime = null;
+
+        const textEncoder = new TextEncoder();
+        const textDecoder = new TextDecoder("utf-8");
+        const CHEERPX_MODULE_URL = "https://cxrtnc.leaningtech.com/1.2.8/cx.esm.js";
+        const DEFAULT_CLOUD_IMAGE_URL = "wss://disks.webvm.io/debian_large_20230522_5044875331.ext2";
+
+        window.jitOsProfiles = {
+            debian_base: {
+                name: "Debian Base Shell",
+                restoreSnapshot: false,
+                idbName: "rust-cloud-os-debian-base",
+                resetOverlay: true,
+                baseImageUrl: window.RUST_CLOUD_OS_BASE_IMAGE_URL || DEFAULT_CLOUD_IMAGE_URL,
+                fallbackImageUrls: [DEFAULT_CLOUD_IMAGE_URL],
+                shell: "/bin/bash",
+                shellArgs: ["--login"],
+                cwd: "/root",
+                uid: 0,
+                gid: 0,
+            },
+            custom_workspace: {
+                name: "Custom Saved Workspace",
+                restoreSnapshot: true,
+                idbName: "rust-cloud-os-custom-workspace",
+                resetOverlay: false,
+                baseImageUrl: window.RUST_CLOUD_OS_BASE_IMAGE_URL || DEFAULT_CLOUD_IMAGE_URL,
+                fallbackImageUrls: [DEFAULT_CLOUD_IMAGE_URL],
+                snapshotUrl: "/api/vm/snapshot",
+                shell: "/bin/bash",
+                shellArgs: ["--login"],
+                cwd: "/root",
+                uid: 0,
+                gid: 0,
+            },
+        };
+
+        function emitStatus(cb, status, message) {
+            try {
+                if (cb) cb(status, message);
+            } catch (err) {
+                console.warn("VM status callback failed", err);
+            }
+        }
+
+        function sanitizeGuestFileName(name) {
+            name = String(name || "").split(/[\\/]/).pop();
+            if (!/^[A-Za-z0-9._-]{1,128}$/.test(name) || name === "." || name === ".." || name.includes("..")) {
+                throw new Error("bad guest file name");
+            }
+            return name;
+        }
+
+        function getTerminalCtor() {
+            return window.Terminal || (window.Xterm && window.Xterm.Terminal);
+        }
+
+        function getFitAddonCtor() {
+            return window.FitAddon && window.FitAddon.FitAddon;
+        }
+
+        function disposeTerminal() {
+            if (!window.terminalRuntime) return;
+            try {
+                if (window.terminalRuntime.resizeObserver) window.terminalRuntime.resizeObserver.disconnect();
+            } catch (_) {}
+            try {
+                if (window.terminalRuntime.term) window.terminalRuntime.term.dispose();
+            } catch (_) {}
+            window.terminalRuntime = null;
+        }
+
+        function createTerminal(onStatus) {
+            const container = document.getElementById("terminal-container");
+            if (!container) {
+                throw new Error("Terminal container not found. Open the workspace first.");
+            }
+
+            const TerminalCtor = getTerminalCtor();
+            if (!TerminalCtor) {
+                throw new Error("xterm.js failed to load");
+            }
+
+            disposeTerminal();
+            container.innerHTML = "";
+
+            const term = new TerminalCtor({
+                cursorBlink: true,
+                convertEol: true,
+                disableStdin: false,
+                scrollback: 20000,
+                fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                fontSize: 13,
+                lineHeight: 1.2,
+                allowProposedApi: false,
+                theme: {
+                    background: "#05070f",
+                    foreground: "#d1fae5",
+                    cursor: "#34d399",
+                    selectionBackground: "#334155",
+                    black: "#0f172a",
+                    red: "#ef4444",
+                    green: "#10b981",
+                    yellow: "#f59e0b",
+                    blue: "#60a5fa",
+                    magenta: "#c084fc",
+                    cyan: "#22d3ee",
+                    white: "#e2e8f0",
+                },
+            });
+
+            const FitAddonCtor = getFitAddonCtor();
+            const fitAddon = FitAddonCtor ? new FitAddonCtor() : null;
+            if (fitAddon) term.loadAddon(fitAddon);
+
+            term.open(container);
+            if (fitAddon) {
+                requestAnimationFrame(() => {
+                    try { fitAddon.fit(); } catch (_) {}
+                });
+            }
+            term.focus();
+            term.writeln("Rust Cloud OS JIT terminal ready.");
+
+            const resizeObserver = new ResizeObserver(() => {
+                if (!fitAddon) return;
+                try { fitAddon.fit(); } catch (_) {}
+            });
+            resizeObserver.observe(container);
+
+            window.terminalRuntime = { term, fitAddon, resizeObserver };
+            emitStatus(onStatus, "booting", "Terminal attached");
+            return window.terminalRuntime;
+        }
+
+        async function loadRuntimeModule() {
+            if (window.RustCloudJitOS) {
+                return { kind: "native-adapter", module: window.RustCloudJitOS };
+            }
+            if (!window.__cheerpxModulePromise) {
+                window.__cheerpxModulePromise = import(CHEERPX_MODULE_URL);
+            }
+            return { kind: "cheerpx-fallback", module: await window.__cheerpxModulePromise };
+        }
+
+        function terminalAdapter(term) {
+            return {
+                cols: () => term.cols || 80,
+                rows: () => term.rows || 24,
+                writeBytes: (buf) => term.write(buf instanceof Uint8Array ? buf : new Uint8Array(buf)),
+                writeText: (s) => term.write(String(s)),
+                onData: (cb) => term.onData(cb),
+                focus: () => term.focus(),
+            };
+        }
+
+        const CHEERPX_IDB_SNAPSHOT_FORMAT = "cheerpx-indexeddb-export-v1";
+
+        function sleep(ms) {
+            return new Promise((resolve) => setTimeout(resolve, ms));
+        }
+
+        function idbRequest(req) {
+            return new Promise((resolve, reject) => {
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error || new Error("IndexedDB request failed"));
+            });
+        }
+
+        function idbTransactionDone(tx) {
+            return new Promise((resolve, reject) => {
+                tx.oncomplete = () => resolve();
+                tx.onerror = () => reject(tx.error || new Error("IndexedDB transaction failed"));
+                tx.onabort = () => reject(tx.error || new Error("IndexedDB transaction aborted"));
+            });
+        }
+
+        function openIndexedDB(dbName, version, onUpgrade) {
+            return new Promise((resolve, reject) => {
+                const req = version ? indexedDB.open(dbName, version) : indexedDB.open(dbName);
+                req.onupgradeneeded = (event) => {
+                    if (onUpgrade) onUpgrade(req.result, event.oldVersion, event.newVersion);
+                };
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error || new Error("Could not open IndexedDB " + dbName));
+                req.onblocked = () => reject(new Error("IndexedDB " + dbName + " is blocked by another open runtime"));
+            });
+        }
+
+        function deleteIndexedDB(dbName) {
+            return new Promise((resolve, reject) => {
+                const req = indexedDB.deleteDatabase(dbName);
+                req.onsuccess = () => resolve();
+                req.onerror = () => reject(req.error || new Error("Could not delete IndexedDB " + dbName));
+                req.onblocked = () => {
+                    console.warn("IndexedDB delete is blocked; continuing after a short wait", dbName);
+                    setTimeout(resolve, 500);
+                };
+            });
+        }
+
+        function arrayBufferToBase64(buffer) {
+            const bytes = new Uint8Array(buffer);
+            let binary = "";
+            const chunk = 0x8000;
+            for (let i = 0; i < bytes.length; i += chunk) {
+                binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+            }
+            return btoa(binary);
+        }
+
+        function base64ToArrayBuffer(b64) {
+            const binary = atob(b64 || "");
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+            return bytes.buffer;
+        }
+
+        async function serializeIdbValue(value) {
+            if (value === undefined) return { t: "undefined" };
+            if (value === null) return { t: "null" };
+            if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+                return { t: typeof value, v: value };
+            }
+            if (typeof value === "bigint") return { t: "bigint", v: value.toString() };
+            if (value instanceof Date) return { t: "date", v: value.toISOString() };
+            if (value instanceof ArrayBuffer) return { t: "arraybuffer", v: arrayBufferToBase64(value) };
+            if (ArrayBuffer.isView(value)) {
+                const view = value;
+                const copy = view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength);
+                return { t: "typedarray", ctor: view.constructor.name, v: arrayBufferToBase64(copy) };
+            }
+            if (value instanceof Blob) {
+                return { t: "blob", mime: value.type || "application/octet-stream", v: arrayBufferToBase64(await value.arrayBuffer()) };
+            }
+            if (Array.isArray(value)) {
+                return { t: "array", v: await Promise.all(value.map((item) => serializeIdbValue(item))) };
+            }
+            if (typeof value === "object") {
+                const entries = [];
+                for (const key of Object.keys(value)) {
+                    entries.push([key, await serializeIdbValue(value[key])]);
+                }
+                return { t: "object", v: entries };
+            }
+            throw new Error("Unsupported IndexedDB value in snapshot: " + typeof value);
+        }
+
+        async function deserializeIdbValue(encoded) {
+            if (!encoded || typeof encoded !== "object") return encoded;
+            switch (encoded.t) {
+                case "undefined": return undefined;
+                case "null": return null;
+                case "string":
+                case "number":
+                case "boolean": return encoded.v;
+                case "bigint": return BigInt(encoded.v);
+                case "date": return new Date(encoded.v);
+                case "arraybuffer": return base64ToArrayBuffer(encoded.v);
+                case "typedarray": {
+                    const buffer = base64ToArrayBuffer(encoded.v);
+                    const ctors = { Int8Array, Uint8Array, Uint8ClampedArray, Int16Array, Uint16Array, Int32Array, Uint32Array, Float32Array, Float64Array, BigInt64Array, BigUint64Array };
+                    if (encoded.ctor === "DataView") return new DataView(buffer);
+                    const Ctor = ctors[encoded.ctor] || Uint8Array;
+                    return new Ctor(buffer);
+                }
+                case "blob": return new Blob([base64ToArrayBuffer(encoded.v)], { type: encoded.mime || "application/octet-stream" });
+                case "array": return Promise.all((encoded.v || []).map((item) => deserializeIdbValue(item)));
+                case "object": {
+                    const obj = {};
+                    for (const [key, val] of encoded.v || []) obj[key] = await deserializeIdbValue(val);
+                    return obj;
+                }
+                default: return encoded;
+            }
+        }
+
+        async function exportIndexedDBSnapshot(dbName) {
+            if (!window.indexedDB) throw new Error("IndexedDB is not available in this browser");
+
+            if (indexedDB.databases) {
+                try {
+                    const dbs = await indexedDB.databases();
+                    if (!dbs.some((db) => db.name === dbName)) {
+                        return { format: CHEERPX_IDB_SNAPSHOT_FORMAT, dbName, version: 1, exportedAt: new Date().toISOString(), stores: [] };
+                    }
+                } catch (err) {
+                    console.warn("Could not enumerate IndexedDB databases", err);
+                }
+            }
+
+            const db = await openIndexedDB(dbName);
+            const storeNames = Array.from(db.objectStoreNames);
+            const snapshot = { format: CHEERPX_IDB_SNAPSHOT_FORMAT, dbName, version: db.version || 1, exportedAt: new Date().toISOString(), stores: [] };
+            if (storeNames.length === 0) {
+                db.close();
+                return snapshot;
+            }
+
+            const tx = db.transaction(storeNames, "readonly");
+            for (const name of storeNames) {
+                const store = tx.objectStore(name);
+                const indexes = Array.from(store.indexNames).map((indexName) => {
+                    const index = store.index(indexName);
+                    return { name: index.name, keyPath: index.keyPath, unique: index.unique, multiEntry: index.multiEntry };
+                });
+                const keys = await idbRequest(store.getAllKeys());
+                const values = await idbRequest(store.getAll());
+                const records = [];
+                for (let i = 0; i < keys.length; i++) {
+                    records.push({ key: await serializeIdbValue(keys[i]), value: await serializeIdbValue(values[i]) });
+                }
+                snapshot.stores.push({ name, keyPath: store.keyPath, autoIncrement: store.autoIncrement, indexes, records });
+            }
+            await idbTransactionDone(tx);
+            db.close();
+            return snapshot;
+        }
+
+        async function importIndexedDBSnapshot(dbName, blob, term) {
+            if (!blob || blob.size === 0) return false;
+            let snapshot;
+            try {
+                snapshot = JSON.parse(await blob.text());
+            } catch (err) {
+                if (term) term.writeln("\r\n[note] Saved snapshot is not a CheerpX browser-overlay snapshot; starting with a fresh overlay.");
+                return false;
+            }
+            if (!snapshot || snapshot.format !== CHEERPX_IDB_SNAPSHOT_FORMAT || !Array.isArray(snapshot.stores)) {
+                if (term) term.writeln("\r\n[note] Saved snapshot format is not supported by the CheerpX fallback; starting fresh.");
+                return false;
+            }
+
+            await deleteIndexedDB(dbName);
+            const version = Math.max(1, Number(snapshot.version) || 1);
+            const db = await openIndexedDB(dbName, version, (upgradeDb) => {
+                for (const storeDef of snapshot.stores) {
+                    if (upgradeDb.objectStoreNames.contains(storeDef.name)) continue;
+                    const options = {};
+                    if (storeDef.keyPath !== null && storeDef.keyPath !== undefined) options.keyPath = storeDef.keyPath;
+                    if (storeDef.autoIncrement) options.autoIncrement = true;
+                    const store = upgradeDb.createObjectStore(storeDef.name, options);
+                    for (const indexDef of storeDef.indexes || []) {
+                        store.createIndex(indexDef.name, indexDef.keyPath, { unique: !!indexDef.unique, multiEntry: !!indexDef.multiEntry });
+                    }
+                }
+            });
+
+            const storeNames = (snapshot.stores || []).map((store) => store.name).filter((name) => db.objectStoreNames.contains(name));
+            if (storeNames.length > 0) {
+                const tx = db.transaction(storeNames, "readwrite");
+                for (const storeDef of snapshot.stores) {
+                    if (!db.objectStoreNames.contains(storeDef.name)) continue;
+                    const store = tx.objectStore(storeDef.name);
+                    const hasInlineKey = store.keyPath !== null && store.keyPath !== undefined;
+                    for (const record of storeDef.records || []) {
+                        const value = await deserializeIdbValue(record.value);
+                        if (hasInlineKey) {
+                            store.put(value);
+                        } else {
+                            store.put(value, await deserializeIdbValue(record.key));
+                        }
+                    }
+                }
+                await idbTransactionDone(tx);
+            }
+            db.close();
+            return true;
+        }
+
+        async function restoreCheerpXOverlaySnapshot(profile, term, onStatus) {
+            if (!profile.restoreSnapshot || !profile.snapshotUrl) return false;
+            emitStatus(onStatus, "downloading", "Restoring saved browser overlay...");
+            try {
+                const res = await fetch(profile.snapshotUrl, { cache: "no-store" });
+                if (res.status === 404) return false;
+                if (!res.ok) throw new Error("snapshot download failed: HTTP " + res.status);
+                const blob = await res.blob();
+                if (!blob.size) return false;
+                const restored = await importIndexedDBSnapshot(profile.idbName, blob, term);
+                if (restored && term) term.writeln("\r\n[snapshot] Restored saved browser-overlay state from S3.");
+                return restored;
+            } catch (err) {
+                console.warn("Snapshot restore skipped", err);
+                if (term) term.writeln("\r\n[warning] Snapshot restore skipped: " + (err.message || err));
+                return false;
+            }
+        }
+
+        async function exportCheerpXOverlaySnapshot(dbName) {
+            const snapshot = await exportIndexedDBSnapshot(dbName);
+            return new Blob([JSON.stringify(snapshot)], { type: "application/json" });
+        }
+
+        async function createNativeAdapterRuntime(adapterModule, profile, term, onStatus) {
+            const adapter = terminalAdapter(term);
+            emitStatus(onStatus, "booting", "Creating browser JIT OS runtime...");
+            const runtime = await adapterModule.create({
+                profile,
+                terminal: adapter,
+                baseImageUrl: profile.baseImageUrl,
+                snapshotUrl: profile.restoreSnapshot ? profile.snapshotUrl : null,
+                onStatus: (status, message) => emitStatus(onStatus, status, message),
+            });
+
+            if (runtime.attachTerminal) {
+                await runtime.attachTerminal(adapter);
+            }
+
+            if (runtime.writeStdin) {
+                const disposable = term.onData((str) => runtime.writeStdin(str));
+                runtime.__terminalDisposable = disposable;
+            }
+
+            if (runtime.startShell) {
+                await runtime.startShell(profile.shell || "/bin/bash", profile.shellArgs || ["--login"]);
+            } else if (runtime.run) {
+                runtime.__shellPromise = runtime.run(profile.shell || "/bin/bash", profile.shellArgs || ["--login"], {
+                    cwd: profile.cwd || "/root",
+                    uid: profile.uid ?? 0,
+                    gid: profile.gid ?? 0,
+                });
+            }
+
+            runtime.__kind = "native-adapter";
+            return runtime;
+        }
+
+        async function createCheerpXRuntime(CheerpX, profile, term, onStatus) {
+            const HttpBytesDevice = CheerpX.HttpBytesDevice || CheerpX.httpBytesDevice;
+            if (!CheerpX.Linux || !CheerpX.IDBDevice || !CheerpX.OverlayDevice || !HttpBytesDevice) {
+                throw new Error("Loaded CheerpX module does not expose the required Linux/device APIs");
+            }
+
+            const rootCandidates = [profile.baseImageUrl].concat(profile.fallbackImageUrls || [])
+                .filter((url, index, urls) => url && urls.indexOf(url) === index);
+            emitStatus(onStatus, "downloading", "Opening root filesystem block device...");
+
+            async function openReadonlyDevice(url) {
+                if (url && url.startsWith("wss://") && CheerpX.CloudDevice) {
+                    return await CheerpX.CloudDevice.create(url);
+                }
+                return await HttpBytesDevice.create(url);
+            }
+
+            let readonlyDevice;
+            let lastOpenError;
+            for (const candidate of rootCandidates) {
+                try {
+                    readonlyDevice = await openReadonlyDevice(candidate);
+                    break;
+                } catch (err) {
+                    lastOpenError = err;
+                    console.warn("Failed to open root filesystem candidate", candidate, err);
+                    if (term) term.writeln(`\r\n[warning] Could not open ${candidate}: ${err.message || err}`);
+                }
+            }
+            if (!readonlyDevice) {
+                throw lastOpenError || new Error("No root filesystem image configured");
+            }
+            const restoredOverlay = await restoreCheerpXOverlaySnapshot(profile, term, onStatus);
+
+            emitStatus(onStatus, "booting", "Mounting writable browser overlay...");
+            const idbDevice = await CheerpX.IDBDevice.create(profile.idbName);
+            if ((profile.resetOverlay || (profile.restoreSnapshot && !restoredOverlay)) && idbDevice.reset) {
+                await idbDevice.reset();
+            }
+            const overlayDevice = await CheerpX.OverlayDevice.create(readonlyDevice, idbDevice);
+            const dataDevice = CheerpX.DataDevice ? await CheerpX.DataDevice.create() : null;
+            const webDevice = CheerpX.WebDevice ? await CheerpX.WebDevice.create("") : null;
+
+            const mounts = [
+                { type: "ext2", path: "/", dev: overlayDevice },
+                { type: "devs", path: "/dev" },
+                { type: "devpts", path: "/dev/pts" },
+                { type: "proc", path: "/proc" },
+            ];
+            if (dataDevice) mounts.push({ type: "dir", path: "/data", dev: dataDevice });
+            if (webDevice) mounts.push({ type: "dir", path: "/app", dev: webDevice });
+
+            const cx = await CheerpX.Linux.create({ mounts });
+            const sendKey = cx.setCustomConsole(
+                (buf) => term.write(buf instanceof Uint8Array ? buf : new Uint8Array(buf)),
+                term.cols || 80,
+                term.rows || 24,
+            );
+
+            const inputDisposable = term.onData((str) => {
+                for (let i = 0; i < str.length; i++) sendKey(str.charCodeAt(i));
+            });
+
+            const runtime = {
+                __kind: "cheerpx-fallback",
+                cx,
+                idbDevice,
+                overlayDevice,
+                dataDevice,
+                writeStdin: (str) => {
+                    const data = typeof str === "string" ? str : textDecoder.decode(str);
+                    for (let i = 0; i < data.length; i++) sendKey(data.charCodeAt(i));
+                },
+                writeFile: async (path, data) => {
+                    if (!dataDevice) throw new Error("DataDevice not available");
+                    const name = sanitizeGuestFileName(path);
+                    await dataDevice.writeFile("/" + name, data);
+                    term.writeln(`\r\nUploaded ${name} to /data/${name}. Copy it into your workspace from inside Linux if needed.`);
+                },
+                deleteFile: async (path) => {
+                    const name = sanitizeGuestFileName(path);
+                    runtime.writeStdin(`rm -f /root/shared/${name} /data/${name}\n`);
+                },
+                destroy: () => {
+                    try { inputDisposable.dispose(); } catch (_) {}
+                },
+            };
+
+            emitStatus(onStatus, "booting", "Starting login shell...");
+            runtime.__shellPromise = cx.run(profile.shell || "/bin/bash", profile.shellArgs || ["--login"], {
+                env: [
+                    "HOME=/root",
+                    "USER=root",
+                    "SHELL=/bin/bash",
+                    "TERM=xterm-256color",
+                    "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                    "LANG=C.UTF-8",
+                ],
+                cwd: profile.cwd || "/root",
+                uid: profile.uid ?? 0,
+                gid: profile.gid ?? 0,
+            }).then((result) => {
+                if (window.osRuntime === runtime) {
+                    term.writeln(`\r\n[process exited with status ${result && result.status !== undefined ? result.status : "unknown"}]`);
+                }
+            }).catch((err) => {
+                if (window.osRuntime === runtime) {
+                    term.writeln(`\r\n[terminal runtime error: ${err.message || err}]`);
+                }
+            });
+
+            return runtime;
+        }
+
+        async function createRuntime(profile, term, onStatus) {
+            const loaded = await loadRuntimeModule();
+            if (loaded.kind === "native-adapter") {
+                return await createNativeAdapterRuntime(loaded.module, profile, term, onStatus);
+            }
+            return await createCheerpXRuntime(loaded.module, profile, term, onStatus);
+        }
+
+        window.bootLinuxVM = async function(profileKey, onStatus) {
+            try {
+                window.stopLinuxVM();
+                const profile = window.jitOsProfiles[profileKey];
+                if (!profile) {
+                    emitStatus(onStatus, "error", "Unknown OS profile: " + profileKey);
+                    return;
+                }
+
+                const terminal = createTerminal(onStatus);
+                emitStatus(onStatus, "downloading", "Preparing " + profile.name + "...");
+                terminal.term.writeln("Profile: " + profile.name);
+                terminal.term.writeln("Root image: " + profile.baseImageUrl);
+                if (profile.restoreSnapshot) terminal.term.writeln("Snapshot stream: " + profile.snapshotUrl);
+                terminal.term.writeln("");
+
+                const runtime = await createRuntime(profile, terminal.term, onStatus);
+                window.osRuntime = runtime;
+                emitStatus(onStatus, "running", profile.name + " is running in the browser terminal.");
+            } catch (err) {
+                console.error("Browser OS boot error:", err);
+                emitStatus(onStatus, "error", err.message || String(err));
+                if (window.terminalRuntime && window.terminalRuntime.term) {
+                    window.terminalRuntime.term.writeln("\r\nBoot failed: " + (err.message || String(err)));
+                }
+            }
+        };
+
+        window.saveLinuxVMSnapshot = function(onDone, onError) {
+            const runtime = window.osRuntime;
+            if (!runtime) {
+                if (onError) onError("OS runtime is not running");
+                return;
+            }
+
+            const getSnapshot = async () => {
+                if (runtime.exportDirtyBlocks) return await runtime.exportDirtyBlocks();
+                if (runtime.exportStateBlob) return await runtime.exportStateBlob();
+                if (runtime.saveState) return await runtime.saveState();
+                throw new Error("The loaded JIT OS adapter must implement exportDirtyBlocks(), exportStateBlob(), or saveState() for S3 snapshot sync");
+            };
+
+            Promise.resolve()
+                .then(getSnapshot)
+                .then((state) => {
+                    const body = state instanceof Blob ? state : new Blob([state], { type: "application/octet-stream" });
+                    return fetch("/api/vm/snapshot", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/octet-stream",
+                            "X-Rust-Cloud-OS-Snapshot-Format": runtime.snapshotFormat || "dirty-block-overlay-v1",
+                        },
+                        body,
+                    });
+                })
+                .then((res) => {
+                    if (!res.ok) throw new Error("snapshot upload failed: HTTP " + res.status);
+                    if (onDone) onDone();
+                })
+                .catch((err) => {
+                    if (onError) onError(err.message || String(err));
+                });
+        };
+
+        window.sendVMInput = function(str) {
+            if (window.osRuntime && window.osRuntime.writeStdin) {
+                return window.osRuntime.writeStdin(str);
+            }
+        };
+
+        window.sendVMCommand = function(str) {
+            return window.sendVMInput(String(str) + "\n");
+        };
+
+        window.uint8ToBase64 = function(arr) {
+            var bin = "";
+            for (var i = 0; i < arr.byteLength; i++) bin += String.fromCharCode(arr[i]);
+            return btoa(bin);
+        };
+
+        window.base64ToUint8 = function(b64) {
+            var bin = atob(b64);
+            var arr = new Uint8Array(bin.length);
+            for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+            return arr;
+        };
+
+        window.writeVMFile = function(name, dataBase64) {
+            if (!window.osRuntime || !window.osRuntime.writeFile) return;
+            const safeName = sanitizeGuestFileName(name);
+            const data = window.base64ToUint8(dataBase64);
+            return window.osRuntime.writeFile("/root/shared/" + safeName, data);
+        };
+
+        window.syncS3ToVM = function(filesList, onDone) {
+            if (!window.osRuntime || !window.osRuntime.writeFile || !filesList || filesList.length === 0) {
+                if (onDone) onDone();
+                return;
+            }
+
+            let pending = filesList.length;
+            filesList.forEach(function(file) {
+                const safeName = sanitizeGuestFileName(file.name);
+                fetch("/api/file/" + encodeURIComponent(safeName))
+                    .then(function(res) {
+                        if (!res.ok) throw new Error("fetch failed for " + safeName);
+                        return res.arrayBuffer();
+                    })
+                    .then(function(buf) {
+                        return window.osRuntime.writeFile("/root/shared/" + safeName, new Uint8Array(buf));
+                    })
+                    .catch(function(err) {
+                        console.error("Error downloading file for OS sync:", safeName, err);
+                    })
+                    .finally(function() {
+                        pending--;
+                        if (pending === 0 && onDone) onDone();
+                    });
+            });
+        };
+
+        window.deleteVMFile = function(name) {
+            if (!window.osRuntime || !window.osRuntime.deleteFile) return;
+            const safeName = sanitizeGuestFileName(name);
+            return window.osRuntime.deleteFile("/root/shared/" + safeName);
+        };
+
+        window.vmFsWatcherInterval = null;
+        window.startVMFsWatcher = function(onFileChanged, onFileDeleted) {
+            if (window.vmFsWatcherInterval) clearInterval(window.vmFsWatcherInterval);
+            if (window.osRuntime && window.osRuntime.watchFiles) {
+                return window.osRuntime.watchFiles("/root/shared", onFileChanged, onFileDeleted);
+            }
+        };
+
+        window.stopLinuxVM = function() {
+            if (window.vmFsWatcherInterval) {
+                clearInterval(window.vmFsWatcherInterval);
+                window.vmFsWatcherInterval = null;
+            }
+            if (window.osRuntime) {
+                try {
+                    if (window.osRuntime.__terminalDisposable) window.osRuntime.__terminalDisposable.dispose();
+                    if (window.osRuntime.destroy) window.osRuntime.destroy();
+                    if (window.osRuntime.shutdown) window.osRuntime.shutdown();
+                } catch (err) {
+                    console.warn("OS runtime shutdown warning:", err);
+                }
+                window.osRuntime = null;
+            }
+            disposeTerminal();
+        };
+    </script>
+</head>
+<body>
+</body>
+</html>
