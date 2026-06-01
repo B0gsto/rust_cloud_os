@@ -1,13 +1,14 @@
-# Rust Cloud OS
+# Rust Cloud Terminal
 
-A Rust workspace for a browser-based cloud desktop prototype: an Axum API server, a Yew/WebAssembly frontend, and authenticated persistence backed by AWS DynamoDB and S3.
+A Rust workspace for a browser-based persistent Linux terminal: an Axum API server, a Yew/WebAssembly frontend, and authenticated persistence backed by AWS DynamoDB and S3.
 
 ## What it does
 
-- Serves a Rust/Yew web UI compiled to WASM.
+- Serves a Rust/Yew terminal-only web UI compiled to WASM.
+- Provides one fullscreen xterm.js Linux terminal backed by the browser runtime.
 - Provides authentication and JWT-protected API routes from an Axum server.
 - Stores users in DynamoDB.
-- Stores per-user files and JIT runtime snapshot overlays in S3.
+- Restores and saves each user's runtime snapshot overlay in S3.
 - Includes a free-tier storage limit with a simple `paid=true` DynamoDB override.
 
 ## Project layout
@@ -94,8 +95,8 @@ aws s3 cp debian-base.ext2 s3://YOUR_BUCKET/system/debian-base.ext2
 aws s3 cp jit-os-overlay.bin s3://YOUR_BUCKET/system/snapshots/jit-os-overlay.bin
 ```
 
-On first login, the server creates or copies a per-user object at `snapshots/jit-os-overlay.bin`; later saves overwrite that user's own snapshot stream.
+On signup and login, the server ensures a per-user object exists at `snapshots/jit-os-overlay.bin`. The terminal boots the persistent workspace automatically, restores that object from S3, and saves it back to S3 automatically after terminal activity, when you click save, and before sign out.
 
 ## Paywall behavior
 
-Uploads are blocked with HTTP `402 Payment Required` when `used > FREE_GB` unless the DynamoDB user item has `paid=true`.
+File uploads and snapshot saves that need additional storage are blocked with HTTP `402 Payment Required` when the account exceeds `FREE_GB`, unless the DynamoDB user item has `paid=true`.

@@ -160,6 +160,7 @@ async fn login(State(a): State<App>, Json(x): Json<Auth>) -> Api<impl IntoRespon
     Argon2::default()
         .verify_password(x.password.as_bytes(), &PasswordHash::new(pass).map_err(e)?)
         .map_err(|_| (StatusCode::UNAUTHORIZED, "bad login".into()))?;
+    ensure_user_snapshot(&a, &email).await?;
     let c = Claims {
         sub: email,
         exp: (Utc::now() + Duration::days(7)).timestamp() as usize,
@@ -325,7 +326,12 @@ async fn delete_file(
         Err(_) => return Err((StatusCode::NOT_FOUND, "file not found".into())),
     };
     reserve_storage(&a, &email, -size).await?;
-    let delete_result = a.s3.delete_object().bucket(&a.bucket).key(&key).send().await;
+    let delete_result =
+        a.s3.delete_object()
+            .bucket(&a.bucket)
+            .key(&key)
+            .send()
+            .await;
     if let Err(err) = delete_result {
         let _ = reserve_storage(&a, &email, size).await;
         return Err(e(err));
@@ -353,6 +359,7 @@ async fn vm_snapshot(State(a): State<App>, h: HeaderMap) -> Api<impl IntoRespons
     {
         headers.insert(header::CONTENT_LENGTH, value);
     }
+    headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     Ok((
         headers,
         Body::from_stream(ReaderStream::new(o.body.into_async_read())),
@@ -361,15 +368,50 @@ async fn vm_snapshot(State(a): State<App>, h: HeaderMap) -> Api<impl IntoRespons
 
 async fn save_vm_snapshot(State(a): State<App>, h: HeaderMap, b: Body) -> Api<impl IntoResponse> {
     let email = auth(&a, &h)?;
+    let key = format!("{email}/{JIT_OS_SNAPSHOT}");
+    let old_size = match a.s3.head_object().bucket(&a.bucket).key(&key).send().await {
+        Ok(resp) => resp.content_length().unwrap_or(0),
+        Err(_) => 0,
+    };
+    let new_size = content_length(&h).ok();
+    let mut reserved_delta = None;
+
+    if let Some(len) = new_size {
+        let delta = len - old_size;
+        if delta > 0 {
+            reserve_storage(&a, &email, delta).await?;
+            reserved_delta = Some(delta);
+        }
+    }
+
     let mut put =
         a.s3.put_object()
             .bucket(&a.bucket)
-            .key(format!("{email}/{JIT_OS_SNAPSHOT}"))
+            .key(&key)
             .body(byte_stream_from_axum_body(b));
-    if let Ok(len) = content_length(&h) {
+    if let Some(len) = new_size {
         put = put.content_length(len);
     }
-    put.send().await.map_err(e)?;
+
+    if let Err(err) = put.send().await {
+        if let Some(delta) = reserved_delta {
+            let _ = reserve_storage(&a, &email, -delta).await;
+        }
+        return Err(e(err));
+    }
+
+    if new_size.is_none()
+        && let Ok(resp) = a.s3.head_object().bucket(&a.bucket).key(&key).send().await
+    {
+        let actual_size = resp.content_length().unwrap_or(0);
+        let delta = actual_size - old_size;
+        if delta > 0
+            && let Err(err) = reserve_storage(&a, &email, delta).await
+        {
+            eprintln!("snapshot storage accounting update failed after upload: {err:?}");
+        }
+    }
+
     Ok(StatusCode::CREATED)
 }
 
@@ -483,7 +525,10 @@ fn sanitize_email(input: &str) -> Api<String> {
 
 fn sanitize_system_asset_name(input: &str) -> Api<String> {
     let name = input.trim();
-    let ext = name.rsplit_once('.').map(|(_, ext)| ext).unwrap_or_default();
+    let ext = name
+        .rsplit_once('.')
+        .map(|(_, ext)| ext)
+        .unwrap_or_default();
     if name.is_empty()
         || name.len() > 128
         || name == "."
@@ -504,10 +549,7 @@ fn sanitize_system_asset_name(input: &str) -> Api<String> {
 fn sanitize_file_name(input: &str) -> Api<String> {
     let name = input.trim();
     let lower = name.to_ascii_lowercase();
-    let first_token = lower
-        .split(['.', '-', '_'])
-        .next()
-        .unwrap_or_default();
+    let first_token = lower.split(['.', '-', '_']).next().unwrap_or_default();
 
     if name.is_empty()
         || name.len() > 128
@@ -543,20 +585,21 @@ async fn reserve_storage(a: &App, email: &str, delta: i64) -> Api<()> {
         return Ok(());
     }
 
-    let mut req = a
-        .db
-        .update_item()
-        .table_name(&a.table)
-        .key("email", Av::S(email.to_string()))
-        .update_expression("SET #used = if_not_exists(#used, :zero) + :delta")
-        .expression_attribute_names("#used", "used")
-        .expression_attribute_values(":zero", Av::N("0".into()))
-        .expression_attribute_values(":delta", Av::N(delta.to_string()));
+    let mut req =
+        a.db.update_item()
+            .table_name(&a.table)
+            .key("email", Av::S(email.to_string()))
+            .update_expression("SET #used = if_not_exists(#used, :zero) + :delta")
+            .expression_attribute_names("#used", "used")
+            .expression_attribute_values(":zero", Av::N("0".into()))
+            .expression_attribute_values(":delta", Av::N(delta.to_string()));
 
     if delta > 0 {
         let max_used = a.free - delta;
         req = req
-            .condition_expression("#paid = :paid OR attribute_not_exists(#used) OR #used <= :max_used")
+            .condition_expression(
+                "#paid = :paid OR attribute_not_exists(#used) OR #used <= :max_used",
+            )
             .expression_attribute_names("#paid", "paid")
             .expression_attribute_values(":paid", Av::Bool(true))
             .expression_attribute_values(":max_used", Av::N(max_used.to_string()));
@@ -573,7 +616,10 @@ async fn reserve_storage(a: &App, email: &str, delta: i64) -> Api<()> {
             if delta > 0 && err_s.contains("ConditionalCheckFailed") {
                 Err((StatusCode::PAYMENT_REQUIRED, "storage limit reached".into()))
             } else if delta < 0 && err_s.contains("ConditionalCheckFailed") {
-                Err((StatusCode::CONFLICT, "storage balance update conflict".into()))
+                Err((
+                    StatusCode::CONFLICT,
+                    "storage balance update conflict".into(),
+                ))
             } else {
                 Err(e(err))
             }

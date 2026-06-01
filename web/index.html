@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Rust Cloud OS</title>
+    <title>Rust Cloud Terminal</title>
     <link data-trunk rel="rust">
     <link data-trunk rel="css" href="style.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css" crossorigin="anonymous">
@@ -29,6 +29,7 @@
          */
         window.osRuntime = null;
         window.terminalRuntime = null;
+        window.snapshotAutosave = { dirty: false, version: 0, timer: null, interval: null, saving: null };
 
         const textEncoder = new TextEncoder();
         const textDecoder = new TextDecoder("utf-8");
@@ -50,7 +51,7 @@
                 gid: 0,
             },
             custom_workspace: {
-                name: "Custom Saved Workspace",
+                name: "Persistent Debian Terminal",
                 restoreSnapshot: true,
                 idbName: "rust-cloud-os-custom-workspace",
                 resetOverlay: false,
@@ -150,7 +151,7 @@
                 });
             }
             term.focus();
-            term.writeln("Rust Cloud OS JIT terminal ready.");
+            term.writeln("Rust Cloud Terminal ready.");
 
             const resizeObserver = new ResizeObserver(() => {
                 if (!fitAddon) return;
@@ -189,6 +190,71 @@
         function sleep(ms) {
             return new Promise((resolve) => setTimeout(resolve, ms));
         }
+
+        const SNAPSHOT_AUTOSAVE_DEBOUNCE_MS = 5000;
+        const SNAPSHOT_AUTOSAVE_INTERVAL_MS = 30000;
+
+        function markRuntimeDirty(reason) {
+            const autosave = window.snapshotAutosave;
+            autosave.dirty = true;
+            autosave.version += 1;
+            if (autosave.timer) clearTimeout(autosave.timer);
+            autosave.timer = setTimeout(() => autoSaveSnapshot(reason || "terminal activity"), SNAPSHOT_AUTOSAVE_DEBOUNCE_MS);
+        }
+
+        function clearAutosaveTimers() {
+            const autosave = window.snapshotAutosave;
+            if (autosave.timer) clearTimeout(autosave.timer);
+            if (autosave.interval) clearInterval(autosave.interval);
+            autosave.timer = null;
+            autosave.interval = null;
+            autosave.dirty = false;
+            autosave.version = 0;
+            autosave.saving = null;
+        }
+
+        function startAutosaveLoop() {
+            const autosave = window.snapshotAutosave;
+            if (autosave.interval) clearInterval(autosave.interval);
+            autosave.interval = setInterval(() => {
+                if (window.osRuntime) autoSaveSnapshot("periodic autosave", true);
+            }, SNAPSHOT_AUTOSAVE_INTERVAL_MS);
+        }
+
+        function autoSaveSnapshot(reason, force) {
+            const autosave = window.snapshotAutosave;
+            if (!window.osRuntime || !window.saveLinuxVMSnapshot || (!autosave.dirty && !force)) return Promise.resolve(false);
+            if (autosave.saving) return autosave.saving;
+
+            const saveVersion = autosave.version;
+            autosave.saving = new Promise((resolve) => {
+                window.saveLinuxVMSnapshot(
+                    () => {
+                        if (autosave.version === saveVersion) autosave.dirty = false;
+                        console.info("S3 snapshot autosaved", reason || "autosave");
+                        resolve(true);
+                    },
+                    (err) => {
+                        console.warn("S3 snapshot autosave failed", err);
+                        resolve(false);
+                    },
+                    { quiet: true }
+                );
+            }).finally(() => {
+                autosave.saving = null;
+                if (autosave.dirty && window.osRuntime) {
+                    if (autosave.timer) clearTimeout(autosave.timer);
+                    autosave.timer = setTimeout(() => autoSaveSnapshot("queued autosave"), SNAPSHOT_AUTOSAVE_DEBOUNCE_MS);
+                }
+            });
+            return autosave.saving;
+        }
+
+        document.addEventListener("visibilitychange", () => {
+            if (document.visibilityState === "hidden" && window.snapshotAutosave.dirty) {
+                autoSaveSnapshot("tab hidden");
+            }
+        });
 
         function idbRequest(req) {
             return new Promise((resolve, reject) => {
@@ -328,6 +394,7 @@
             }
 
             const tx = db.transaction(storeNames, "readonly");
+            const done = idbTransactionDone(tx);
             for (const name of storeNames) {
                 const store = tx.objectStore(name);
                 const indexes = Array.from(store.indexNames).map((indexName) => {
@@ -342,7 +409,7 @@
                 }
                 snapshot.stores.push({ name, keyPath: store.keyPath, autoIncrement: store.autoIncrement, indexes, records });
             }
-            await idbTransactionDone(tx);
+            await done;
             db.close();
             return snapshot;
         }
@@ -360,10 +427,9 @@
                 if (term) term.writeln("\r\n[note] Saved snapshot format is not supported by the CheerpX fallback; starting fresh.");
                 return false;
             }
+            if (snapshot.stores.length === 0) return false;
 
-            await deleteIndexedDB(dbName);
-            const version = Math.max(1, Number(snapshot.version) || 1);
-            const db = await openIndexedDB(dbName, version, (upgradeDb) => {
+            const createSnapshotStores = (upgradeDb) => {
                 for (const storeDef of snapshot.stores) {
                     if (upgradeDb.objectStoreNames.contains(storeDef.name)) continue;
                     const options = {};
@@ -374,26 +440,66 @@
                         store.createIndex(indexDef.name, indexDef.keyPath, { unique: !!indexDef.unique, multiEntry: !!indexDef.multiEntry });
                     }
                 }
-            });
+            };
+
+            try {
+                await deleteIndexedDB(dbName);
+            } catch (err) {
+                console.warn("Could not delete old IndexedDB snapshot before restore; trying in-place restore", err);
+            }
+
+            const version = Math.max(1, Number(snapshot.version) || 1);
+            let db;
+            try {
+                db = await openIndexedDB(dbName, version, createSnapshotStores);
+            } catch (err) {
+                console.warn("Could not open snapshot IndexedDB at saved version; opening current version", err);
+                db = await openIndexedDB(dbName);
+            }
+            const missingStores = snapshot.stores.filter((storeDef) => !db.objectStoreNames.contains(storeDef.name));
+            if (missingStores.length > 0) {
+                const nextVersion = Math.max((db.version || version) + 1, version + 1);
+                db.close();
+                db = await openIndexedDB(dbName, nextVersion, createSnapshotStores);
+            }
 
             const storeNames = (snapshot.stores || []).map((store) => store.name).filter((name) => db.objectStoreNames.contains(name));
-            if (storeNames.length > 0) {
-                const tx = db.transaction(storeNames, "readwrite");
-                for (const storeDef of snapshot.stores) {
-                    if (!db.objectStoreNames.contains(storeDef.name)) continue;
-                    const store = tx.objectStore(storeDef.name);
-                    const hasInlineKey = store.keyPath !== null && store.keyPath !== undefined;
-                    for (const record of storeDef.records || []) {
-                        const value = await deserializeIdbValue(record.value);
-                        if (hasInlineKey) {
-                            store.put(value);
-                        } else {
-                            store.put(value, await deserializeIdbValue(record.key));
-                        }
+            if (storeNames.length === 0) {
+                db.close();
+                return false;
+            }
+
+            const decodedStores = [];
+            for (const storeDef of snapshot.stores) {
+                if (!db.objectStoreNames.contains(storeDef.name)) continue;
+                const decodedRecords = [];
+                for (const record of storeDef.records || []) {
+                    decodedRecords.push({
+                        key: await deserializeIdbValue(record.key),
+                        value: await deserializeIdbValue(record.value),
+                    });
+                }
+                decodedStores.push({ name: storeDef.name, records: decodedRecords });
+            }
+
+            const allStoreNames = Array.from(db.objectStoreNames);
+            const tx = db.transaction(allStoreNames, "readwrite");
+            const done = idbTransactionDone(tx);
+            for (const name of allStoreNames) {
+                tx.objectStore(name).clear();
+            }
+            for (const decodedStore of decodedStores) {
+                const store = tx.objectStore(decodedStore.name);
+                const hasInlineKey = store.keyPath !== null && store.keyPath !== undefined;
+                for (const record of decodedStore.records) {
+                    if (hasInlineKey) {
+                        store.put(record.value);
+                    } else {
+                        store.put(record.value, record.key);
                     }
                 }
-                await idbTransactionDone(tx);
             }
+            await done;
             db.close();
             return true;
         }
@@ -402,11 +508,14 @@
             if (!profile.restoreSnapshot || !profile.snapshotUrl) return false;
             emitStatus(onStatus, "downloading", "Restoring saved browser overlay...");
             try {
-                const res = await fetch(profile.snapshotUrl, { cache: "no-store" });
+                const res = await fetch(profile.snapshotUrl, { cache: "no-store", credentials: "same-origin" });
                 if (res.status === 404) return false;
                 if (!res.ok) throw new Error("snapshot download failed: HTTP " + res.status);
                 const blob = await res.blob();
-                if (!blob.size) return false;
+                if (!blob.size) {
+                    if (term) term.writeln("\r\n[snapshot] No saved S3 snapshot yet; starting with a fresh persistent overlay.");
+                    return false;
+                }
                 const restored = await importIndexedDBSnapshot(profile.idbName, blob, term);
                 if (restored && term) term.writeln("\r\n[snapshot] Restored saved browser-overlay state from S3.");
                 return restored;
@@ -436,6 +545,9 @@
             if (runtime.attachTerminal) {
                 await runtime.attachTerminal(adapter);
             }
+
+            const dirtyDisposable = term.onData(() => markRuntimeDirty("terminal input"));
+            runtime.__dirtyDisposable = dirtyDisposable;
 
             if (runtime.writeStdin) {
                 const disposable = term.onData((str) => runtime.writeStdin(str));
@@ -492,7 +604,7 @@
 
             emitStatus(onStatus, "booting", "Mounting writable browser overlay...");
             const idbDevice = await CheerpX.IDBDevice.create(profile.idbName);
-            if ((profile.resetOverlay || (profile.restoreSnapshot && !restoredOverlay)) && idbDevice.reset) {
+            if (profile.resetOverlay && idbDevice.reset) {
                 await idbDevice.reset();
             }
             const overlayDevice = await CheerpX.OverlayDevice.create(readonlyDevice, idbDevice);
@@ -517,7 +629,22 @@
 
             const inputDisposable = term.onData((str) => {
                 for (let i = 0; i < str.length; i++) sendKey(str.charCodeAt(i));
+                markRuntimeDirty("terminal input");
             });
+
+            const processOptions = {
+                env: [
+                    "HOME=/root",
+                    "USER=root",
+                    "SHELL=/bin/bash",
+                    "TERM=xterm-256color",
+                    "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                    "LANG=C.UTF-8",
+                ],
+                cwd: profile.cwd || "/root",
+                uid: profile.uid ?? 0,
+                gid: profile.gid ?? 0,
+            };
 
             const runtime = {
                 __kind: "cheerpx-fallback",
@@ -525,9 +652,29 @@
                 idbDevice,
                 overlayDevice,
                 dataDevice,
+                snapshotFormat: CHEERPX_IDB_SNAPSHOT_FORMAT,
                 writeStdin: (str) => {
                     const data = typeof str === "string" ? str : textDecoder.decode(str);
                     for (let i = 0; i < data.length; i++) sendKey(data.charCodeAt(i));
+                },
+                flushFilesystem: async () => {
+                    try {
+                        await cx.run("/bin/sync", [], processOptions);
+                    } catch (err) {
+                        console.warn("CheerpX sync process failed; falling back to shell sync", err);
+                        try {
+                            runtime.writeStdin("sync\n");
+                            await sleep(1500);
+                        } catch (_) {}
+                    }
+                    await sleep(300);
+                },
+                exportStateBlob: async () => {
+                    emitStatus(onStatus, "running", "Saving browser overlay snapshot...");
+                    return await exportCheerpXOverlaySnapshot(profile.idbName);
+                },
+                saveState: async () => {
+                    return await runtime.exportStateBlob();
                 },
                 writeFile: async (path, data) => {
                     if (!dataDevice) throw new Error("DataDevice not available");
@@ -545,19 +692,7 @@
             };
 
             emitStatus(onStatus, "booting", "Starting login shell...");
-            runtime.__shellPromise = cx.run(profile.shell || "/bin/bash", profile.shellArgs || ["--login"], {
-                env: [
-                    "HOME=/root",
-                    "USER=root",
-                    "SHELL=/bin/bash",
-                    "TERM=xterm-256color",
-                    "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-                    "LANG=C.UTF-8",
-                ],
-                cwd: profile.cwd || "/root",
-                uid: profile.uid ?? 0,
-                gid: profile.gid ?? 0,
-            }).then((result) => {
+            runtime.__shellPromise = cx.run(profile.shell || "/bin/bash", profile.shellArgs || ["--login"], processOptions).then((result) => {
                 if (window.osRuntime === runtime) {
                     term.writeln(`\r\n[process exited with status ${result && result.status !== undefined ? result.status : "unknown"}]`);
                 }
@@ -596,6 +731,7 @@
 
                 const runtime = await createRuntime(profile, terminal.term, onStatus);
                 window.osRuntime = runtime;
+                startAutosaveLoop();
                 emitStatus(onStatus, "running", profile.name + " is running in the browser terminal.");
             } catch (err) {
                 console.error("Browser OS boot error:", err);
@@ -606,14 +742,25 @@
             }
         };
 
-        window.saveLinuxVMSnapshot = function(onDone, onError) {
+        window.saveLinuxVMSnapshot = function(onDone, onError, options) {
             const runtime = window.osRuntime;
+            const quiet = options && options.quiet;
+            const saveVersion = window.snapshotAutosave.version;
             if (!runtime) {
                 if (onError) onError("OS runtime is not running");
                 return;
             }
 
             const getSnapshot = async () => {
+                if (runtime.flushFilesystem) {
+                    await runtime.flushFilesystem();
+                } else if (runtime.writeStdin && !quiet) {
+                    try {
+                        runtime.writeStdin("sync\n");
+                        await sleep(1500);
+                    } catch (_) {}
+                }
+
                 if (runtime.exportDirtyBlocks) return await runtime.exportDirtyBlocks();
                 if (runtime.exportStateBlob) return await runtime.exportStateBlob();
                 if (runtime.saveState) return await runtime.saveState();
@@ -626,6 +773,8 @@
                     const body = state instanceof Blob ? state : new Blob([state], { type: "application/octet-stream" });
                     return fetch("/api/vm/snapshot", {
                         method: "POST",
+                        credentials: "same-origin",
+                        cache: "no-store",
                         headers: {
                             "Content-Type": "application/octet-stream",
                             "X-Rust-Cloud-OS-Snapshot-Format": runtime.snapshotFormat || "dirty-block-overlay-v1",
@@ -635,11 +784,34 @@
                 })
                 .then((res) => {
                     if (!res.ok) throw new Error("snapshot upload failed: HTTP " + res.status);
+                    if (window.snapshotAutosave.version === saveVersion) window.snapshotAutosave.dirty = false;
                     if (onDone) onDone();
                 })
                 .catch((err) => {
                     if (onError) onError(err.message || String(err));
                 });
+        };
+
+        window.saveThenStopLinuxVM = function(onDone, onError) {
+            const finish = () => {
+                try {
+                    if (window.stopLinuxVM) window.stopLinuxVM();
+                } finally {
+                    if (onDone) onDone();
+                }
+            };
+
+            if (!window.osRuntime || !window.saveLinuxVMSnapshot) {
+                finish();
+                return;
+            }
+
+            window.saveLinuxVMSnapshot(
+                finish,
+                function(err) {
+                    if (onError) onError(err || "snapshot save failed");
+                }
+            );
         };
 
         window.sendVMInput = function(str) {
@@ -714,6 +886,7 @@
         };
 
         window.stopLinuxVM = function() {
+            clearAutosaveTimers();
             if (window.vmFsWatcherInterval) {
                 clearInterval(window.vmFsWatcherInterval);
                 window.vmFsWatcherInterval = null;
@@ -721,6 +894,7 @@
             if (window.osRuntime) {
                 try {
                     if (window.osRuntime.__terminalDisposable) window.osRuntime.__terminalDisposable.dispose();
+                    if (window.osRuntime.__dirtyDisposable) window.osRuntime.__dirtyDisposable.dispose();
                     if (window.osRuntime.destroy) window.osRuntime.destroy();
                     if (window.osRuntime.shutdown) window.osRuntime.shutdown();
                 } catch (err) {
